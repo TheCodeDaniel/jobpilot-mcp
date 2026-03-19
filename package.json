@@ -1,0 +1,36 @@
+{
+  "name": "jobpilot-mcp",
+  "version": "1.0.0",
+  "description": "AI-powered job hunting agent — searches jobs, scores fit, writes cover letters, and logs everything to Notion.",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch"
+  },
+  "bin": {
+    "jobpilot-mcp": "dist/index.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT",
+  "author": "Daniel A. — THECODEDANIEL LIMITED",
+  "keywords": [
+    "mcp",
+    "notion",
+    "job-search",
+    "ai",
+    "cover-letter",
+    "job-tracker"
+  ]
+}

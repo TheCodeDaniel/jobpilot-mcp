@@ -1,0 +1,1 @@
+{"version":3,"file":"updateApplicationStatus.d.ts","sourceRoot":"","sources":["../../src/tools/updateApplicationStatus.ts"],"names":[],"mappings":"AAEA,wBAAsB,uBAAuB,CAAC,IAAI,EAAE;IAClD,cAAc,EAAE,MAAM,CAAC;IACvB,UAAU,EAAE,SAAS,GAAG,SAAS,GAAG,WAAW,GAAG,UAAU,GAAG,OAAO,CAAC;IACvE,KAAK,CAAC,EAAE,MAAM,CAAC;CAChB;;;;;GAsDA"}
