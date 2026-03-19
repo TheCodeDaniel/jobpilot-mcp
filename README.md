@@ -5,7 +5,7 @@
 > I was spending hours searching, copy-pasting, writing cover letters, and forgetting to follow up.
 > JobPilot automates the grind so I can focus on what matters — actually getting hired."
 >
-> — Daniel A., THECODEDANIEL LIMITED
+> — Daniel A., THECODEDANIEL
 
 ---
 
@@ -352,7 +352,7 @@ MIT — free to use, fork, and build on.
 
 ## Author
 
-Built by **Daniel A.** — Lead Mobile Engineer & Founder of **THECODEDANIEL LIMITED** (RC: 7189690).
+Built by **Daniel A.** — **THECODEDANIEL**.
 
 > This tool was built for the Notion MCP Challenge 2026 — and also because I genuinely needed it.
 > Job hunting is brutal. Let AI do the boring parts.
