@@ -83,108 +83,63 @@ Create a database in Notion with exactly these columns:
 
 ---
 
-## Setup Guide (Step by Step)
+## Setup Guide
 
 ### Prerequisites
 
-- Node.js 18 or higher
-- Claude Desktop app
-- A Notion account
-- An Anthropic API key
+- [Node.js 18+](https://nodejs.org/)
+- [Claude Desktop](https://claude.ai/download)
+- A [Notion](https://www.notion.so) account
+- An [Anthropic API key](https://console.anthropic.com)
 
----
-
-### Step 1 — Clone & Install
+### Step 1 — Clone, install & build
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/jobpilot-mcp.git
 cd jobpilot-mcp
 npm install
-```
-
----
-
-### Step 2 — Get Your API Keys
-
-#### Anthropic API Key
-1. Go to https://console.anthropic.com
-2. Click **API Keys** → **Create Key**
-3. Copy the key — you'll use it in Step 4
-
-#### Notion Integration Token
-1. Go to https://www.notion.so/my-integrations
-2. Click **New Integration**
-3. Give it a name: `JobPilot`
-4. Set capabilities: ✅ Read content, ✅ Update content, ✅ Insert content
-5. Click **Submit** and copy the **Internal Integration Token** (starts with `secret_...`)
-
-#### Notion Database ID
-1. Open Notion and create a new **Full Page** database (not inline)
-2. Name it `Job Applications`
-3. Add all columns from the schema table above
-4. Click **Share** → **Invite** → search for your `JobPilot` integration → click **Invite**
-5. Copy the database ID from the URL:
-   ```
-   https://notion.so/yourworkspace/HERE_IS_THE_ID?v=...
-   ```
-   The ID is the 32-character string before the `?v=`
-
----
-
-### Step 3 — Configure Environment
-
-```bash
-cp .env.example .env
-```
-
-Open `.env` and fill in your keys:
-
-```env
-ANTHROPIC_API_KEY=sk-ant-...
-NOTION_API_KEY=secret_...
-NOTION_DATABASE_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-```
-
----
-
-### Step 4 — Build the Project
-
-```bash
 npm run build
 ```
 
-This compiles TypeScript to `dist/`. You should see no errors.
+### Step 2 — Set up Notion
 
----
+1. Go to [notion.so/my-integrations](https://www.notion.so/my-integrations) → **New Integration** → name it `JobPilot`
+2. Set capabilities: **Read**, **Update**, **Insert** → click **Submit**
+3. Copy the **Internal Integration Token** (starts with `secret_...`)
+4. In Notion, create a **Full Page** database called `Job Applications` with the columns from the [schema table](#notion-database-schema) above
+5. **Share** the database → **Invite** your `JobPilot` integration
+6. Copy the **Database ID** from the page URL — it's the 32-character string before `?v=`:
+   ```
+   https://notion.so/yourworkspace/DATABASE_ID_HERE?v=...
+   ```
 
-### Step 5 — Add to Claude Desktop
+### Step 3 — Add to Claude Desktop
 
-Open your Claude Desktop config file:
+Locate (or create) the Claude Desktop config file:
 
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-- **Linux**: `~/.config/Claude/claude_desktop_config.json`
+| OS | Path |
+|---|---|
+| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
+| Linux | `~/.config/Claude/claude_desktop_config.json` |
 
-> **File doesn't exist?** Claude Desktop doesn't create this file by default. You need to create the directory and file yourself:
->
-> **macOS / Linux:**
-> ```bash
-> # macOS
-> mkdir -p ~/Library/Application\ Support/Claude
-> touch ~/Library/Application\ Support/Claude/claude_desktop_config.json
->
-> # Linux
-> mkdir -p ~/.config/Claude
-> touch ~/.config/Claude/claude_desktop_config.json
-> ```
->
-> **Windows (PowerShell):**
-> ```powershell
-> New-Item -ItemType Directory -Force -Path "$env:APPDATA\Claude"
-> New-Item -ItemType File -Path "$env:APPDATA\Claude\claude_desktop_config.json"
-> ```
+If the file doesn't exist yet, create it:
 
-Add JobPilot to the `mcpServers` section (if the file is empty, paste the entire block):
+```bash
+# macOS
+mkdir -p ~/Library/Application\ Support/Claude && touch ~/Library/Application\ Support/Claude/claude_desktop_config.json
+
+# Linux
+mkdir -p ~/.config/Claude && touch ~/.config/Claude/claude_desktop_config.json
+```
+
+```powershell
+# Windows (PowerShell)
+New-Item -ItemType Directory -Force -Path "$env:APPDATA\Claude"
+New-Item -ItemType File -Path "$env:APPDATA\Claude\claude_desktop_config.json"
+```
+
+Paste the following into the config file (replace the placeholder values):
 
 ```json
 {
@@ -193,29 +148,22 @@ Add JobPilot to the `mcpServers` section (if the file is empty, paste the entire
       "command": "node",
       "args": ["/FULL/PATH/TO/jobpilot-mcp/dist/index.js"],
       "env": {
-        "ANTHROPIC_API_KEY": "your_key_here",
-        "NOTION_API_KEY": "your_key_here",
-        "NOTION_DATABASE_ID": "your_database_id_here"
+        "ANTHROPIC_API_KEY": "sk-ant-...",
+        "NOTION_API_KEY": "secret_...",
+        "NOTION_DATABASE_ID": "your_database_id"
       }
     }
   }
 }
 ```
 
-> **Already have other MCP servers configured?** Just add the `"jobpilot": { ... }` block inside your existing `"mcpServers"` object — don't replace the whole file.
+> **Tip:** Run `pwd` in the project folder to get the full path for `args`.
+>
+> **Already have other MCP servers?** Add the `"jobpilot": { ... }` block inside your existing `"mcpServers"` object — don't replace the whole file.
 
-**Replace `/FULL/PATH/TO/jobpilot-mcp/`** with the actual absolute path to where you cloned the repo.
+### Step 4 — Restart & verify
 
-To get the full path, run this in your project folder:
-```bash
-pwd
-```
-
----
-
-### Step 6 — Restart Claude Desktop
-
-Fully quit and reopen Claude Desktop. You should see a 🔨 (tools) icon appear in the chat input bar. Click it — you should see all 7 JobPilot tools listed.
+Fully quit and reopen Claude Desktop. You should see a tools icon in the chat input bar — click it to confirm all 7 JobPilot tools are listed.
 
 ---
 
