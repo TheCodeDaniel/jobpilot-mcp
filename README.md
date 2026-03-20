@@ -165,7 +165,7 @@ Paste the following into the editor, replace the placeholder values, and save:
 
 ### Step 4 — Restart & verify
 
-Fully quit and reopen Claude Desktop. You should see a tools icon in the chat input bar — click it to confirm all 7 JobPilot tools are listed.
+Fully quit and reopen Claude Desktop. Select the **Chat** tab (not Cowork or Code), and you should see a tools icon in the chat input bar — click it to confirm all 7 JobPilot tools are listed.
 
 ---
 
