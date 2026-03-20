@@ -123,23 +123,25 @@ Locate (or create) the Claude Desktop config file:
 | Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
 | Linux | `~/.config/Claude/claude_desktop_config.json` |
 
-If the file doesn't exist yet, create it:
+If the file doesn't exist yet, create it and open it in one go:
 
 ```bash
 # macOS
-mkdir -p ~/Library/Application\ Support/Claude && touch ~/Library/Application\ Support/Claude/claude_desktop_config.json
+mkdir -p ~/Library/Application\ Support/Claude
+open -e ~/Library/Application\ Support/Claude/claude_desktop_config.json 2>/dev/null || nano ~/Library/Application\ Support/Claude/claude_desktop_config.json
 
 # Linux
-mkdir -p ~/.config/Claude && touch ~/.config/Claude/claude_desktop_config.json
+mkdir -p ~/.config/Claude
+nano ~/.config/Claude/claude_desktop_config.json
 ```
 
 ```powershell
 # Windows (PowerShell)
-New-Item -ItemType Directory -Force -Path "$env:APPDATA\Claude"
-New-Item -ItemType File -Path "$env:APPDATA\Claude\claude_desktop_config.json"
+New-Item -ItemType Directory -Force -Path "$env:APPDATA\Claude" | Out-Null
+notepad "$env:APPDATA\Claude\claude_desktop_config.json"
 ```
 
-Paste the following into the config file (replace the placeholder values):
+Paste the following into the editor, replace the placeholder values, and save:
 
 ```json
 {
