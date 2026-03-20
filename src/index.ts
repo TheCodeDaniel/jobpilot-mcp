@@ -41,8 +41,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "string",
               description: "Raw text content of the CV/resume",
             },
+            file_path: {
+              type: "string",
+              description: "Absolute path to a PDF CV/resume file",
+            },
           },
-          required: ["cv_text"],
         },
       },
       {

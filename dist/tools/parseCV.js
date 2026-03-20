@@ -1,7 +1,18 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { readFile } from "fs/promises";
+import { PDFParse } from "pdf-parse";
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 export async function parseCV(args) {
-    const { cv_text } = args;
+    let cv_text = args.cv_text;
+    if (!cv_text && !args.file_path) {
+        throw new Error("Either cv_text or file_path must be provided.");
+    }
+    if (args.file_path) {
+        const buffer = await readFile(args.file_path);
+        const parser = new PDFParse({ data: new Uint8Array(buffer) });
+        const result = await parser.getText();
+        cv_text = result.text;
+    }
     const message = await anthropic.messages.create({
         model: "claude-sonnet-4-20250514",
         max_tokens: 1024,

@@ -11,7 +11,8 @@ export interface CandidateProfile {
     languages?: string[];
 }
 export declare function parseCV(args: {
-    cv_text: string;
+    cv_text?: string;
+    file_path?: string;
 }): Promise<{
     content: {
         type: string;
