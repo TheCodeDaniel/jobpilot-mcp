@@ -165,7 +165,26 @@ Open your Claude Desktop config file:
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 - **Linux**: `~/.config/Claude/claude_desktop_config.json`
 
-Add JobPilot to the `mcpServers` section:
+> **File doesn't exist?** Claude Desktop doesn't create this file by default. You need to create the directory and file yourself:
+>
+> **macOS / Linux:**
+> ```bash
+> # macOS
+> mkdir -p ~/Library/Application\ Support/Claude
+> touch ~/Library/Application\ Support/Claude/claude_desktop_config.json
+>
+> # Linux
+> mkdir -p ~/.config/Claude
+> touch ~/.config/Claude/claude_desktop_config.json
+> ```
+>
+> **Windows (PowerShell):**
+> ```powershell
+> New-Item -ItemType Directory -Force -Path "$env:APPDATA\Claude"
+> New-Item -ItemType File -Path "$env:APPDATA\Claude\claude_desktop_config.json"
+> ```
+
+Add JobPilot to the `mcpServers` section (if the file is empty, paste the entire block):
 
 ```json
 {
@@ -182,6 +201,8 @@ Add JobPilot to the `mcpServers` section:
   }
 }
 ```
+
+> **Already have other MCP servers configured?** Just add the `"jobpilot": { ... }` block inside your existing `"mcpServers"` object — don't replace the whole file.
 
 **Replace `/FULL/PATH/TO/jobpilot-mcp/`** with the actual absolute path to where you cloned the repo.
 
