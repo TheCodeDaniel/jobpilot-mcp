@@ -5,7 +5,7 @@ export async function updateApplicationStatus(args) {
         throw new Error("NOTION_API_KEY must be set in environment variables.");
     }
     const properties = {
-        Status: { select: { name: new_status } },
+        Status: { rich_text: [{ text: { content: new_status } }] },
         "Last Updated": {
             date: { start: new Date().toISOString().split("T")[0] },
         },

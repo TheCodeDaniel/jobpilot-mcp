@@ -50,11 +50,12 @@ RemoteOK / WeWorkRemotely
 
 ---
 
-## The 7 MCP Tools
+## The 8 MCP Tools
 
 | Tool | What it does |
 |---|---|
-| `parse_cv` | Extracts your profile from CV text — skills, titles, bio, experience |
+| `setup_notion_db` | One-time setup — creates the Job List DB in Notion with the correct schema |
+| `parse_cv` | Extracts your profile from CV text or PDF — skills, titles, bio, experience |
 | `search_jobs` | Searches RemoteOK + WeWorkRemotely for matching roles |
 | `score_job_fit` | AI scores how well you match each job (0–100) with gap analysis |
 | `generate_cover_letter` | Writes a personalised cover letter (professional / enthusiastic / concise) |
@@ -66,14 +67,16 @@ RemoteOK / WeWorkRemotely
 
 ## Notion Database Schema
 
-Create a database in Notion with exactly these columns:
+> You do **not** need to create this manually. Run the `setup_notion_db` tool once and it creates everything for you.
+
+The database ("Job List DB") is created with these columns:
 
 | Column Name | Type | Notes |
 |---|---|---|
 | Job Title | Title | Primary column |
 | Company | Text | |
 | Job URL | URL | |
-| Status | Select | Options: Applied, Pending, Interview, Rejected, Offer |
+| Status | Text | Applied, Pending, Interview, Rejected, or Offer |
 | Date Applied | Date | |
 | Salary | Text | If available |
 | Fit Score | Number | AI-generated 0–100 |
@@ -106,12 +109,13 @@ npm run build
 1. Go to [notion.so/my-integrations](https://www.notion.so/my-integrations) → **New Integration** → name it `JobPilot`
 2. Set capabilities: **Read**, **Update**, **Insert** → click **Submit**
 3. Copy the **Internal Integration Token** (starts with `secret_...`)
-4. In Notion, create a **Full Page** database called `Job Applications` with the columns from the [schema table](#notion-database-schema) above
-5. **Share** the database → **Invite** your `JobPilot` integration
-6. Copy the **Database ID** from the page URL — it's the 32-character string before `?v=`:
+4. In Notion, create a blank page (this is where the database will be created)
+5. **Share** the page → **Invite** your `JobPilot` integration
+6. Copy the **Page ID** from the URL — it's the 32-character string before `?v=`:
    ```
-   https://notion.so/yourworkspace/DATABASE_ID_HERE?v=...
+   https://notion.so/yourworkspace/PAGE_ID_HERE?v=...
    ```
+   You'll use this in Step 4.
 
 ### Step 3 — Add to Claude Desktop
 
@@ -163,9 +167,19 @@ Paste the following into the editor, replace the placeholder values, and save:
 >
 > **Already have other MCP servers?** Add the `"jobpilot": { ... }` block inside your existing `"mcpServers"` object — don't replace the whole file.
 
-### Step 4 — Restart & verify
+### Step 4 — Restart & create the database
 
-Fully quit and reopen Claude Desktop. Select the **Chat** tab (not Cowork or Code), and you should see a tools icon in the chat input bar — click it to confirm all 7 JobPilot tools are listed.
+Fully quit and reopen Claude Desktop. Select the **Chat** tab (not Cowork or Code), and you should see a tools icon in the chat input bar — click it to confirm all 8 JobPilot tools are listed.
+
+Then ask Claude to set up your Notion database:
+
+```
+Run setup_notion_db with parent_page_id PAGE_ID_HERE
+```
+
+Replace `PAGE_ID_HERE` with the page ID from Step 2. The tool will create the "Job List DB" database with the correct schema and return a `database_id`. Copy it and add it to your Claude Desktop config as `NOTION_DATABASE_ID`, then restart Claude Desktop once more.
+
+> If `NOTION_DATABASE_ID` is already set and valid, the tool will skip creation and confirm the existing database — so it's safe to run multiple times.
 
 ---
 

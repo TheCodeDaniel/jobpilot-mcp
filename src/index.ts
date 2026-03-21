@@ -13,6 +13,7 @@ import { generateFollowUp } from "./tools/generateFollowUp.js";
 import { logToNotion } from "./tools/logToNotion.js";
 import { updateApplicationStatus } from "./tools/updateApplicationStatus.js";
 import { searchJobs } from "./tools/searchJobs.js";
+import { setupNotionDB } from "./tools/setupNotionDB.js";
 
 const server = new Server(
   {
@@ -30,6 +31,22 @@ const server = new Server(
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
+      {
+        name: "setup_notion_db",
+        description:
+          "One-time setup: creates the Job List DB in Notion with the correct schema. If NOTION_DATABASE_ID is already set and valid, it skips creation. Run this before using log_to_notion.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            parent_page_id: {
+              type: "string",
+              description:
+                "The Notion page ID where the database will be created. Copy it from the page URL.",
+            },
+          },
+          required: ["parent_page_id"],
+        },
+      },
       {
         name: "parse_cv",
         description:
@@ -189,6 +206,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     switch (name) {
+      case "setup_notion_db":
+        return await setupNotionDB(args as any);
+
       case "parse_cv":
         return await parseCV(args as any);
 

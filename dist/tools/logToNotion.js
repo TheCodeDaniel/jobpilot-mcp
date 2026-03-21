@@ -17,7 +17,7 @@ export async function logToNotion(args) {
             url: job_url,
         },
         "Status": {
-            select: { name: status },
+            rich_text: [{ text: { content: status } }],
         },
         "Date Applied": {
             date: { start: new Date().toISOString().split("T")[0] },

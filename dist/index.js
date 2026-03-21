@@ -9,6 +9,7 @@ import { generateFollowUp } from "./tools/generateFollowUp.js";
 import { logToNotion } from "./tools/logToNotion.js";
 import { updateApplicationStatus } from "./tools/updateApplicationStatus.js";
 import { searchJobs } from "./tools/searchJobs.js";
+import { setupNotionDB } from "./tools/setupNotionDB.js";
 const server = new Server({
     name: "jobpilot-mcp",
     version: "1.0.0",
@@ -21,6 +22,20 @@ const server = new Server({
 server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
         tools: [
+            {
+                name: "setup_notion_db",
+                description: "One-time setup: creates the Job List DB in Notion with the correct schema. If NOTION_DATABASE_ID is already set and valid, it skips creation. Run this before using log_to_notion.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        parent_page_id: {
+                            type: "string",
+                            description: "The Notion page ID where the database will be created. Copy it from the page URL.",
+                        },
+                    },
+                    required: ["parent_page_id"],
+                },
+            },
             {
                 name: "parse_cv",
                 description: "Parse a CV/resume (PDF path or raw text) and extract a structured candidate profile: name, skills, years of experience, job titles, education, and a short bio summary.",
@@ -171,6 +186,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
     try {
         switch (name) {
+            case "setup_notion_db":
+                return await setupNotionDB(args);
             case "parse_cv":
                 return await parseCV(args);
             case "search_jobs":

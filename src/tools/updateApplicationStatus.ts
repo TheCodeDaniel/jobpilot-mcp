@@ -12,7 +12,7 @@ export async function updateApplicationStatus(args: {
   }
 
   const properties: Record<string, any> = {
-    Status: { select: { name: new_status } },
+    Status: { rich_text: [{ text: { content: new_status } }] },
     "Last Updated": {
       date: { start: new Date().toISOString().split("T")[0] },
     },
