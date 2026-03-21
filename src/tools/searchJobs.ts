@@ -10,13 +10,19 @@ export interface JobListing {
   source: string;
 }
 
-function matchesKeyword(text: string, role: string): boolean {
-  const haystack = text.toLowerCase();
-  const fullKeyword = role.toLowerCase();
-  if (haystack.includes(fullKeyword)) return true;
-  // Match if ANY word (3+ chars) from the role appears in the text
-  const words = fullKeyword.split(/\s+/).filter((w) => w.length >= 3);
-  return words.some((w) => haystack.includes(w));
+function matchesRole(title: string, tags: string[], role: string): boolean {
+  const roleWords = role.toLowerCase().split(/\s+/).filter((w) => w.length >= 3);
+  const titleLower = title.toLowerCase();
+
+  // Check if title contains the full role or any significant keyword
+  if (titleLower.includes(role.toLowerCase())) return true;
+  if (roleWords.some((w) => titleLower.includes(w))) return true;
+
+  // Check if tags contain any keyword from the role
+  const tagsLower = tags.map((t) => t.toLowerCase());
+  if (roleWords.some((w) => tagsLower.some((tag) => tag.includes(w) || w.includes(tag)))) return true;
+
+  return false;
 }
 
 export async function searchJobs(args: {
@@ -59,8 +65,7 @@ export async function searchJobs(args: {
         if (jobs.length >= max_results) break;
         if (!job.position || !job.company) continue;
 
-        const text = `${job.position} ${job.company} ${(job.tags || []).join(" ")} ${job.description || ""}`;
-        if (!matchesKeyword(text, role)) continue;
+        if (!matchesRole(job.position, job.tags || [], role)) continue;
 
         jobs.push({
           id: `remoteok-${job.id}`,
@@ -119,8 +124,7 @@ export async function searchJobs(args: {
           const link = getTag("link");
           const desc = getTag("description").replace(/<[^>]+>/g, "").slice(0, 500);
 
-          const text = `${title} ${desc}`;
-          if (!matchesKeyword(text, role)) continue;
+          if (!matchesRole(title, [wwrCategory], role)) continue;
 
           const company = title.split(" at ").pop() || "Unknown";
           const jobTitle = title.split(" at ")[0] || title;
@@ -166,8 +170,10 @@ export async function searchJobs(args: {
           for (const job of data) {
             if (jobs.length >= max_results) break;
 
-            const text = `${job.title || ""} ${job.company_name || ""} ${(job.tags || []).map((t: any) => t.name || t).join(" ")} ${job.description || ""}`;
-            if (!matchesKeyword(text, role)) continue;
+            const jobTags = Array.isArray(job.tags)
+              ? job.tags.map((t: any) => (typeof t === "string" ? t : t.name || ""))
+              : [];
+            if (!matchesRole(job.title || "", jobTags, role)) continue;
 
             jobs.push({
               id: `wn-${job.id || job.slug || Math.random().toString(36).slice(2, 10)}`,
@@ -176,9 +182,7 @@ export async function searchJobs(args: {
               url: job.url || job.apply_url || "",
               salary: job.salary || undefined,
               description: (job.description || "").replace(/<[^>]+>/g, "").slice(0, 500),
-              tags: Array.isArray(job.tags)
-                ? job.tags.map((t: any) => (typeof t === "string" ? t : t.name || ""))
-                : [],
+              tags: jobTags,
               date_posted: job.pub_date || new Date().toISOString(),
               source: "WorkingNomads",
             });

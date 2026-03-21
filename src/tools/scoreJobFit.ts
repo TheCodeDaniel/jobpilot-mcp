@@ -67,31 +67,54 @@ export async function scoreJobFit(args: {
 
   // ── Scoring ────────────────────────────────────────────────────────────────
   let score = 0;
+  const jobTitleNorm = normalize(job.title || "");
+  const jobTitleWords = jobTitleNorm.split(/\s+/).filter((w) => w.length > 2);
 
-  // Skill match component (up to 50 points)
-  const skillRatio =
-    candidateSkills.length > 0
-      ? matched_skills.length / Math.max(candidateSkills.length, techTerms.length || 1)
-      : 0;
-  score += Math.round(skillRatio * 50);
+  // Primary skill match: does the candidate have the core skill from the job title?
+  const hasPrimaryMatch = jobTitleWords.some(
+    (tw) => candidateSkills.some((s) => s.includes(tw) || tw.includes(s))
+  );
+  if (hasPrimaryMatch) {
+    score += 40; // Primary title skill match → +40
+  }
 
-  // Title relevance (up to 25 points)
-  const titleWords = normalize(job.title || "").split(/\s+/);
-  const titleMatches = titleWords.filter(
-    (tw) =>
-      tw.length > 2 &&
-      (candidateTitle.includes(tw) ||
-        candidateSkills.some((s) => s.includes(tw)))
-  ).length;
-  score += Math.round((titleMatches / Math.max(titleWords.length, 1)) * 25);
+  // Additional matched skills → +3 each, capped at +30
+  const additionalMatches = hasPrimaryMatch ? matched_skills.length - 1 : matched_skills.length;
+  score += Math.min(Math.max(additionalMatches, 0) * 3, 30);
 
   // Experience bonus (up to 15 points)
-  if (candidateYears >= 5) score += 15;
-  else if (candidateYears >= 3) score += 10;
-  else if (candidateYears >= 1) score += 5;
+  // Extract required years from job description (e.g. "3+ years", "5 years")
+  const reqYearsMatch = (job.description || "").match(/(\d+)\+?\s*(?:years?|yrs?)/i);
+  const requiredYears = reqYearsMatch ? parseInt(reqYearsMatch[1]) : 3;
 
-  // Base engagement points (10 points if they have any skills at all)
-  if (candidateSkills.length > 0) score += 10;
+  if (candidateYears >= requiredYears) {
+    score += 15;
+  } else if (candidateYears >= requiredYears - 1) {
+    score += 10;
+  } else if (candidateYears >= 1) {
+    score += 5;
+  }
+
+  // Remote experience bonus (+5)
+  const expTitlesAndCompanies = (candidate_profile?.experience || [])
+    .map((e) => `${e.title} ${e.company}`.toLowerCase())
+    .join(" ");
+  if (expTitlesAndCompanies.includes("remote") || jobText.includes("remote")) {
+    score += 5;
+  }
+
+  // Leadership bonus (+5)
+  const hasLeadership = (candidate_profile?.experience || []).some((e) =>
+    /\b(lead|senior|principal|staff|head|director|manager)\b/i.test(e.title)
+  );
+  if (hasLeadership) {
+    score += 5;
+  }
+
+  // Minimum score floor: if primary title skill matches, ensure at least 40
+  if (hasPrimaryMatch && score < 40) {
+    score = 40;
+  }
 
   score = Math.min(score, 100);
 

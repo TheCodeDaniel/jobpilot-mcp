@@ -94,12 +94,15 @@ function extractSkills(sections: Record<string, string>): string[] {
 
   if (!skillSection) return [];
 
-  // Split by commas, pipes, bullets, dashes, newlines
+  // Split by " - ", ",", "&", "|", bullets, newlines, and "/"
   return skillSection
-    .split(/[,|•·\n]/)
+    .split(/\s+-\s+|[,|•·&\n\/]/)
     .map((s) => s.replace(/^[\s\-–—*]+/, "").trim())
     .filter((s) => s.length > 0 && s.length < 60);
 }
+
+const DATE_RANGE_RE =
+  /((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*[\s,]*\d{4}|20\d{2}|19\d{2})\s*[-–—to]+\s*((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*[\s,]*\d{4}|20\d{2}|19\d{2}|present|current|now)/i;
 
 function extractExperience(
   sections: Record<string, string>
@@ -114,44 +117,88 @@ function extractExperience(
   if (!expSection) return [];
 
   const entries: Array<{ title: string; company: string; start: string; end: string }> = [];
+  const allLines = expSection.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
 
-  // Split into blocks by double newlines or lines that start with a date/title pattern
-  const blocks = expSection.split(/\n{2,}/);
-
-  for (const block of blocks) {
-    const lines = block
-      .split("\n")
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0);
-    if (lines.length === 0) continue;
-
-    // Try to find a date range in the block
-    const dateMatch = block.match(
-      /((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*[\s,]*\d{4}|20\d{2}|19\d{2})\s*[-–—to]+\s*((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*[\s,]*\d{4}|20\d{2}|19\d{2}|present|current|now)/i
-    );
-
-    const start = dateMatch ? dateMatch[1].trim() : "";
-    const end = dateMatch ? dateMatch[2].trim() : "";
-
-    // First non-date line is usually the title, second is usually the company (or vice versa)
-    const titleLine = lines[0] || "";
-    const companyLine = lines.length > 1 ? lines[1] : "";
-
-    // If the line contains " at " or " — " or " | ", split it
-    const atSplit = titleLine.match(/^(.+?)\s+(?:at|@|—|\|)\s+(.+)$/i);
-    if (atSplit) {
-      entries.push({ title: atSplit[1].trim(), company: atSplit[2].trim(), start, end });
-    } else {
-      entries.push({
-        title: titleLine.replace(/[-–—].*$/, "").trim(),
-        company: companyLine.replace(/[-–—].*$/, "").trim(),
-        start,
-        end,
-      });
+  // Find indices of lines containing date ranges — these mark job boundaries
+  const dateLineIndices: number[] = [];
+  for (let i = 0; i < allLines.length; i++) {
+    if (DATE_RANGE_RE.test(allLines[i])) {
+      dateLineIndices.push(i);
     }
   }
 
-  return entries.filter((e) => e.title.length > 0);
+  if (dateLineIndices.length === 0) {
+    // Fallback: split by double newlines
+    const blocks = expSection.split(/\n{2,}/);
+    for (const block of blocks) {
+      const lines = block.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
+      if (lines.length === 0) continue;
+      const titleLine = lines[0] || "";
+      const companyLine = lines.length > 1 ? lines[1] : "";
+      const atSplit = titleLine.match(/^(.+?)\s+(?:at|@|—|\|)\s+(.+)$/i);
+      if (atSplit) {
+        entries.push({ title: atSplit[1].trim(), company: atSplit[2].trim(), start: "", end: "" });
+      } else {
+        entries.push({ title: titleLine, company: companyLine, start: "", end: "" });
+      }
+    }
+    return entries.filter((e) => e.title.length > 0);
+  }
+
+  // For each date line, gather context lines above it (title, company) until
+  // we hit the previous date line or the start of the section
+  for (let d = 0; d < dateLineIndices.length; d++) {
+    const dateIdx = dateLineIndices[d];
+    const dateLine = allLines[dateIdx];
+    const dateMatch = dateLine.match(DATE_RANGE_RE)!;
+    const start = dateMatch[1].trim();
+    const end = dateMatch[2].trim();
+
+    // Context lines are between previous date line (or start) and this date line
+    const prevBoundary = d > 0 ? dateLineIndices[d - 1] + 1 : 0;
+    const contextLines = allLines.slice(prevBoundary, dateIdx).filter(
+      (l) => l.length > 0 && !DATE_RANGE_RE.test(l)
+    );
+
+    // Also check if title/company info is on the same line as the date
+    const dateStripped = dateLine.replace(DATE_RANGE_RE, "").replace(/[|—–\-,]/g, " ").trim();
+
+    let title = "";
+    let company = "";
+
+    if (contextLines.length >= 2) {
+      // Check for "Title at Company" pattern
+      const atSplit = contextLines[0].match(/^(.+?)\s+(?:at|@|—|\|)\s+(.+)$/i);
+      if (atSplit) {
+        title = atSplit[1].trim();
+        company = atSplit[2].trim();
+      } else {
+        title = contextLines[0];
+        company = contextLines[1];
+      }
+    } else if (contextLines.length === 1) {
+      const atSplit = contextLines[0].match(/^(.+?)\s+(?:at|@|—|\|)\s+(.+)$/i);
+      if (atSplit) {
+        title = atSplit[1].trim();
+        company = atSplit[2].trim();
+      } else {
+        title = contextLines[0];
+        company = dateStripped || "";
+      }
+    } else if (dateStripped) {
+      title = dateStripped;
+    }
+
+    // Clean up title/company — remove trailing date fragments
+    title = title.replace(/[-–—].*$/, "").trim();
+    company = company.replace(/[-–—].*$/, "").trim();
+
+    if (title.length > 0) {
+      entries.push({ title, company, start, end });
+    }
+  }
+
+  return entries;
 }
 
 function calculateYearsExperience(
@@ -189,24 +236,21 @@ function extractEducation(
   if (!eduSection) return [];
 
   const entries: Array<{ degree: string; institution: string }> = [];
-  const blocks = eduSection.split(/\n{2,}/);
+  const lines = eduSection.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
 
-  for (const block of blocks) {
-    const lines = block
-      .split("\n")
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0);
-    if (lines.length === 0) continue;
-
-    // Common patterns: "BSc Computer Science, University of Lagos" or two lines
-    const commaSplit = lines[0].match(/^(.+?),\s*(.+)$/);
+  for (const line of lines) {
+    // "Degree, Institution" pattern
+    const commaSplit = line.match(/^(.+?),\s*(.+)$/);
     if (commaSplit) {
       entries.push({ degree: commaSplit[1].trim(), institution: commaSplit[2].trim() });
-    } else {
-      entries.push({
-        degree: lines[0] || "",
-        institution: lines.length > 1 ? lines[1] : "",
-      });
+    } else if (line.length > 0) {
+      // Standalone line — try to detect "Degree — Institution" or "Degree | Institution"
+      const dashSplit = line.match(/^(.+?)\s*[—|]\s*(.+)$/);
+      if (dashSplit) {
+        entries.push({ degree: dashSplit[1].trim(), institution: dashSplit[2].trim() });
+      } else {
+        entries.push({ degree: line, institution: "" });
+      }
     }
   }
 
