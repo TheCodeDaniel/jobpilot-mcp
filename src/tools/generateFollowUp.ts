@@ -1,7 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
 export async function generateFollowUp(args: {
   candidate_name: string;
   company_name: string;
@@ -11,43 +7,54 @@ export async function generateFollowUp(args: {
 }) {
   const { candidate_name, company_name, job_title, days_since_applied } = args;
 
-  const urgency =
-    days_since_applied < 7
-      ? "gentle and early"
-      : days_since_applied < 14
-      ? "polite and professional"
-      : "firm but still courteous";
+  let subject: string;
+  let body: string;
 
-  const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 400,
-    messages: [
-      {
-        role: "user",
-        content: `Write a ${urgency} follow-up email for a job application.
-It has been ${days_since_applied} days since they applied.
-Keep it under 120 words. Do not use placeholder text.
-
-Candidate: ${candidate_name}
-Company: ${company_name}
-Job Title: ${job_title}
-
-Return ONLY valid JSON with this shape (no markdown, no backticks):
-{
-  "subject": "Email subject line",
-  "body": "Full email body"
-}`,
-      },
-    ],
-  });
-
-  const rawText = message.content[0].type === "text" ? message.content[0].text : "";
-
-  let email: { subject: string; body: string };
-  try {
-    email = JSON.parse(rawText.trim());
-  } catch {
-    throw new Error("Failed to parse follow-up email response");
+  if (days_since_applied < 7) {
+    // Gentle / early follow-up
+    subject = `Following up on my ${job_title} application`;
+    body = [
+      `Hi,`,
+      ``,
+      `I recently submitted my application for the ${job_title} position at ${company_name} and wanted to confirm it was received.`,
+      ``,
+      `I'm very interested in this opportunity and would love the chance to discuss how my background could contribute to your team. Please let me know if there's any additional information I can provide.`,
+      ``,
+      `Thank you for your time.`,
+      ``,
+      `Best regards,`,
+      `${candidate_name}`,
+    ].join("\n");
+  } else if (days_since_applied < 14) {
+    // Polite and professional
+    subject = `Checking in — ${job_title} application at ${company_name}`;
+    body = [
+      `Dear Hiring Team,`,
+      ``,
+      `I applied for the ${job_title} role at ${company_name} ${days_since_applied} days ago and wanted to follow up on the status of my application.`,
+      ``,
+      `I remain very enthusiastic about this opportunity and believe my experience aligns well with what the team is looking for. I'd welcome the chance to discuss this further at your convenience.`,
+      ``,
+      `Looking forward to hearing from you.`,
+      ``,
+      `Kind regards,`,
+      `${candidate_name}`,
+    ].join("\n");
+  } else {
+    // Firm but courteous
+    subject = `Follow-up: ${job_title} position — ${company_name}`;
+    body = [
+      `Dear Hiring Team,`,
+      ``,
+      `I submitted my application for the ${job_title} position at ${company_name} ${days_since_applied} days ago. I understand the hiring process takes time, but I wanted to reiterate my strong interest in this role.`,
+      ``,
+      `If the position has been filled or the team has moved in a different direction, I would appreciate a brief update. Otherwise, I am happy to provide any additional information or references you may need.`,
+      ``,
+      `Thank you for your consideration.`,
+      ``,
+      `Sincerely,`,
+      `${candidate_name}`,
+    ].join("\n");
   }
 
   return {
@@ -58,7 +65,7 @@ Return ONLY valid JSON with this shape (no markdown, no backticks):
           {
             success: true,
             days_since_applied,
-            follow_up_email: email,
+            follow_up_email: { subject, body },
           },
           null,
           2
