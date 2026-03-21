@@ -1,5 +1,4 @@
 import { readFile } from "fs/promises";
-import { PDFParse } from "pdf-parse";
 // ── Section splitter ─────────────────────────────────────────────────────────
 // Splits CV text into named sections (SUMMARY, SKILLS, EXPERIENCE, EDUCATION, etc.)
 function extractSections(text) {
@@ -178,10 +177,8 @@ export async function parseCV(args) {
         throw new Error("Either cv_text or file_path must be provided.");
     }
     if (args.file_path) {
-        const buffer = await readFile(args.file_path);
-        const parser = new PDFParse({ data: new Uint8Array(buffer) });
-        const result = await parser.getText();
-        cv_text = result.text;
+        const buffer = await readFile(args.file_path, "utf-8");
+        cv_text = buffer;
     }
     if (!cv_text || cv_text.trim().length === 0) {
         throw new Error("CV text is empty. Check your file or input.");

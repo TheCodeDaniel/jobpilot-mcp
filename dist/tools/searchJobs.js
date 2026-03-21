@@ -1,3 +1,12 @@
+function matchesKeyword(text, role) {
+    const haystack = text.toLowerCase();
+    const fullKeyword = role.toLowerCase();
+    if (haystack.includes(fullKeyword))
+        return true;
+    // Match if ANY word (3+ chars) from the role appears in the text
+    const words = fullKeyword.split(/\s+/).filter((w) => w.length >= 3);
+    return words.some((w) => haystack.includes(w));
+}
 export async function searchJobs(args) {
     const { role, max_results = 10 } = args;
     const jobs = [];
@@ -5,23 +14,37 @@ export async function searchJobs(args) {
     // ── RemoteOK ───────────────────────────────────────────────────────────────
     try {
         const res = await fetch("https://remoteok.com/api", {
-            headers: { "User-Agent": "JobPilot-MCP/1.0" },
+            headers: {
+                "User-Agent": "JobPilot-MCP/1.0",
+                Accept: "application/json",
+            },
         });
         if (!res.ok) {
-            errors.push(`RemoteOK HTTP ${res.status}`);
+            const msg = `RemoteOK HTTP ${res.status}`;
+            errors.push(msg);
+            console.error(`[searchJobs] ${msg}`);
         }
         else {
-            const data = (await res.json());
+            const raw = await res.text();
+            let data;
+            try {
+                data = JSON.parse(raw);
+            }
+            catch {
+                const msg = `RemoteOK returned invalid JSON (${raw.slice(0, 100)})`;
+                errors.push(msg);
+                console.error(`[searchJobs] ${msg}`);
+                data = [];
+            }
             // Index 0 is a legal notice / metadata object — skip it
-            const listings = data.slice(1);
-            const keyword = role.toLowerCase();
+            const listings = Array.isArray(data) ? data.slice(1) : [];
             for (const job of listings) {
                 if (jobs.length >= max_results)
                     break;
                 if (!job.position || !job.company)
                     continue;
-                const text = `${job.position} ${job.company} ${(job.tags || []).join(" ")} ${job.description || ""}`.toLowerCase();
-                if (!text.includes(keyword) && !keyword.split(/\s+/).some((w) => text.includes(w)))
+                const text = `${job.position} ${job.company} ${(job.tags || []).join(" ")} ${job.description || ""}`;
+                if (!matchesKeyword(text, role))
                     continue;
                 jobs.push({
                     id: `remoteok-${job.id}`,
@@ -40,7 +63,9 @@ export async function searchJobs(args) {
         }
     }
     catch (e) {
-        errors.push(`RemoteOK error: ${e.message}`);
+        const msg = `RemoteOK error: ${e.message}`;
+        errors.push(msg);
+        console.error(`[searchJobs] ${msg}`);
     }
     // ── We Work Remotely RSS ───────────────────────────────────────────────────
     if (jobs.length < max_results) {
@@ -52,13 +77,14 @@ export async function searchJobs(args) {
                     : "programming";
             const res = await fetch(`https://weworkremotely.com/categories/remote-${wwrCategory}-jobs.rss`, { headers: { "User-Agent": "JobPilot-MCP/1.0" } });
             if (!res.ok) {
-                errors.push(`WWR HTTP ${res.status}`);
+                const msg = `WWR HTTP ${res.status}`;
+                errors.push(msg);
+                console.error(`[searchJobs] ${msg}`);
             }
             else {
                 const xml = await res.text();
                 const itemRegex = /<item>([\s\S]*?)<\/item>/g;
                 let match;
-                const keyword = role.toLowerCase();
                 while ((match = itemRegex.exec(xml)) !== null && jobs.length < max_results) {
                     const item = match[1];
                     const getTag = (tag) => {
@@ -69,9 +95,8 @@ export async function searchJobs(args) {
                     const title = getTag("title");
                     const link = getTag("link");
                     const desc = getTag("description").replace(/<[^>]+>/g, "").slice(0, 500);
-                    // Match against keywords in the role
-                    const text = `${title} ${desc}`.toLowerCase();
-                    if (!keyword.split(/\s+/).some((w) => text.includes(w)))
+                    const text = `${title} ${desc}`;
+                    if (!matchesKeyword(text, role))
                         continue;
                     const company = title.split(" at ").pop() || "Unknown";
                     const jobTitle = title.split(" at ")[0] || title;
@@ -89,43 +114,55 @@ export async function searchJobs(args) {
             }
         }
         catch (e) {
-            errors.push(`WWR error: ${e.message}`);
+            const msg = `WWR error: ${e.message}`;
+            errors.push(msg);
+            console.error(`[searchJobs] ${msg}`);
         }
     }
-    // ── Working Nomads fallback ────────────────────────────────────────────────
+    // ── Working Nomads ─────────────────────────────────────────────────────────
     if (jobs.length < max_results) {
         try {
             const res = await fetch("https://www.workingnomads.com/api/exposed_jobs/?category=development", { headers: { "User-Agent": "JobPilot-MCP/1.0" } });
             if (!res.ok) {
-                errors.push(`WorkingNomads HTTP ${res.status}`);
+                const msg = `WorkingNomads HTTP ${res.status}`;
+                errors.push(msg);
+                console.error(`[searchJobs] ${msg}`);
             }
             else {
                 const data = (await res.json());
-                const keyword = role.toLowerCase();
-                for (const job of data) {
-                    if (jobs.length >= max_results)
-                        break;
-                    const text = `${job.title || ""} ${job.company_name || ""} ${(job.tags || []).map((t) => t.name || t).join(" ")} ${job.description || ""}`.toLowerCase();
-                    if (!keyword.split(/\s+/).some((w) => text.includes(w)))
-                        continue;
-                    jobs.push({
-                        id: `wn-${job.id || job.slug || Math.random().toString(36).slice(2, 10)}`,
-                        title: job.title || "Untitled",
-                        company: job.company_name || "Unknown",
-                        url: job.url || job.apply_url || "",
-                        salary: job.salary || undefined,
-                        description: (job.description || "").replace(/<[^>]+>/g, "").slice(0, 500),
-                        tags: Array.isArray(job.tags)
-                            ? job.tags.map((t) => (typeof t === "string" ? t : t.name || ""))
-                            : [],
-                        date_posted: job.pub_date || new Date().toISOString(),
-                        source: "WorkingNomads",
-                    });
+                if (!Array.isArray(data)) {
+                    const msg = "WorkingNomads returned non-array response";
+                    errors.push(msg);
+                    console.error(`[searchJobs] ${msg}`);
+                }
+                else {
+                    for (const job of data) {
+                        if (jobs.length >= max_results)
+                            break;
+                        const text = `${job.title || ""} ${job.company_name || ""} ${(job.tags || []).map((t) => t.name || t).join(" ")} ${job.description || ""}`;
+                        if (!matchesKeyword(text, role))
+                            continue;
+                        jobs.push({
+                            id: `wn-${job.id || job.slug || Math.random().toString(36).slice(2, 10)}`,
+                            title: job.title || "Untitled",
+                            company: job.company_name || "Unknown",
+                            url: job.url || job.apply_url || "",
+                            salary: job.salary || undefined,
+                            description: (job.description || "").replace(/<[^>]+>/g, "").slice(0, 500),
+                            tags: Array.isArray(job.tags)
+                                ? job.tags.map((t) => (typeof t === "string" ? t : t.name || ""))
+                                : [],
+                            date_posted: job.pub_date || new Date().toISOString(),
+                            source: "WorkingNomads",
+                        });
+                    }
                 }
             }
         }
         catch (e) {
-            errors.push(`WorkingNomads error: ${e.message}`);
+            const msg = `WorkingNomads error: ${e.message}`;
+            errors.push(msg);
+            console.error(`[searchJobs] ${msg}`);
         }
     }
     if (jobs.length === 0) {
@@ -136,7 +173,7 @@ export async function searchJobs(args) {
                     text: JSON.stringify({
                         success: false,
                         message: `No jobs found for "${role}". Try a broader keyword like "developer" or "engineer".`,
-                        errors: errors.length > 0 ? errors : undefined,
+                        errors,
                         jobs: [],
                     }, null, 2),
                 },

@@ -1,5 +1,4 @@
 import { readFile } from "fs/promises";
-import { PDFParse } from "pdf-parse";
 
 export interface CandidateProfile {
   name: string;
@@ -233,10 +232,8 @@ export async function parseCV(args: { cv_text?: string; file_path?: string }) {
   }
 
   if (args.file_path) {
-    const buffer = await readFile(args.file_path);
-    const parser = new PDFParse({ data: new Uint8Array(buffer) });
-    const result = await parser.getText();
-    cv_text = result.text;
+    const buffer = await readFile(args.file_path, "utf-8");
+    cv_text = buffer;
   }
 
   if (!cv_text || cv_text.trim().length === 0) {
