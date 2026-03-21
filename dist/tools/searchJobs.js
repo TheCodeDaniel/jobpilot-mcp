@@ -1,22 +1,35 @@
-function matchesRole(title, tags, role) {
-    const roleWords = role.toLowerCase().split(/\s+/).filter((w) => w.length >= 3);
-    const titleLower = title.toLowerCase();
-    // Check if title contains the full role or any significant keyword
-    if (titleLower.includes(role.toLowerCase()))
-        return true;
-    if (roleWords.some((w) => titleLower.includes(w)))
-        return true;
-    // Check if tags contain any keyword from the role
-    const tagsLower = tags.map((t) => t.toLowerCase());
-    if (roleWords.some((w) => tagsLower.some((tag) => tag.includes(w) || w.includes(tag))))
-        return true;
-    return false;
-}
+// Related tags for specific domains — used as fallback matching
+const RELATED_TAGS = {
+    flutter: ["flutter", "dart", "mobile", "ios", "android"],
+    mobile: ["flutter", "dart", "mobile", "ios", "android", "react-native", "swift", "kotlin"],
+    react: ["react", "reactjs", "react-native", "javascript", "typescript", "frontend"],
+    ios: ["ios", "swift", "mobile", "flutter", "dart"],
+    android: ["android", "kotlin", "java", "mobile", "flutter", "dart"],
+};
 export async function searchJobs(args) {
     const { role, max_results = 10 } = args;
-    const jobs = [];
     const errors = [];
-    // ── RemoteOK ───────────────────────────────────────────────────────────────
+    // Build keyword list: split role into words + add related tags
+    const keywords = role.toLowerCase().split(/\s+/).filter((w) => w.length > 0);
+    const relatedTags = [];
+    for (const kw of keywords) {
+        if (RELATED_TAGS[kw]) {
+            relatedTags.push(...RELATED_TAGS[kw]);
+        }
+    }
+    const allMatchTerms = [...new Set([...keywords, ...relatedTags])];
+    console.error(`[searchJobs] role="${role}" keywords=${JSON.stringify(keywords)} matchTerms=${JSON.stringify(allMatchTerms)}`);
+    // ── Filter function: job must match in title OR tags ─────────────────────
+    function jobMatchesRole(title, tags) {
+        const titleLower = title.toLowerCase();
+        const tagsLower = tags.map((t) => t.toLowerCase());
+        const titleMatch = allMatchTerms.some((k) => titleLower.includes(k));
+        const tagMatch = tagsLower.some((tag) => allMatchTerms.some((k) => tag.includes(k) || k.includes(tag)));
+        return titleMatch || tagMatch;
+    }
+    // ── Collect jobs from all sources ────────────────────────────────────────
+    const allFetchedJobs = [];
+    // ── RemoteOK ─────────────────────────────────────────────────────────────
     try {
         const res = await fetch("https://remoteok.com/api", {
             headers: {
@@ -41,16 +54,12 @@ export async function searchJobs(args) {
                 console.error(`[searchJobs] ${msg}`);
                 data = [];
             }
-            // Index 0 is a legal notice / metadata object — skip it
             const listings = Array.isArray(data) ? data.slice(1) : [];
+            console.error(`[searchJobs] RemoteOK returned ${listings.length} total listings`);
             for (const job of listings) {
-                if (jobs.length >= max_results)
-                    break;
                 if (!job.position || !job.company)
                     continue;
-                if (!matchesRole(job.position, job.tags || [], role))
-                    continue;
-                jobs.push({
+                allFetchedJobs.push({
                     id: `remoteok-${job.id}`,
                     title: job.position,
                     company: job.company,
@@ -71,103 +80,103 @@ export async function searchJobs(args) {
         errors.push(msg);
         console.error(`[searchJobs] ${msg}`);
     }
-    // ── We Work Remotely RSS ───────────────────────────────────────────────────
-    if (jobs.length < max_results) {
-        try {
-            const wwrCategory = role.toLowerCase().includes("design")
-                ? "design"
-                : role.toLowerCase().includes("market")
-                    ? "marketing"
-                    : "programming";
-            const res = await fetch(`https://weworkremotely.com/categories/remote-${wwrCategory}-jobs.rss`, { headers: { "User-Agent": "JobPilot-MCP/1.0" } });
-            if (!res.ok) {
-                const msg = `WWR HTTP ${res.status}`;
+    // ── We Work Remotely RSS ─────────────────────────────────────────────────
+    try {
+        const wwrCategory = role.toLowerCase().includes("design")
+            ? "design"
+            : role.toLowerCase().includes("market")
+                ? "marketing"
+                : "programming";
+        const res = await fetch(`https://weworkremotely.com/categories/remote-${wwrCategory}-jobs.rss`, { headers: { "User-Agent": "JobPilot-MCP/1.0" } });
+        if (!res.ok) {
+            const msg = `WWR HTTP ${res.status}`;
+            errors.push(msg);
+            console.error(`[searchJobs] ${msg}`);
+        }
+        else {
+            const xml = await res.text();
+            const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+            let match;
+            while ((match = itemRegex.exec(xml)) !== null) {
+                const item = match[1];
+                const getTag = (tag) => {
+                    const m = new RegExp(`<${tag}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`).exec(item) ||
+                        new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`).exec(item);
+                    return m ? m[1].trim() : "";
+                };
+                const title = getTag("title");
+                const link = getTag("link");
+                const desc = getTag("description").replace(/<[^>]+>/g, "").slice(0, 500);
+                const company = title.split(" at ").pop() || "Unknown";
+                const jobTitle = title.split(" at ")[0] || title;
+                allFetchedJobs.push({
+                    id: `wwr-${Buffer.from(link).toString("base64").slice(0, 16)}`,
+                    title: jobTitle,
+                    company,
+                    url: link,
+                    description: desc,
+                    tags: [wwrCategory],
+                    date_posted: getTag("pubDate"),
+                    source: "WeWorkRemotely",
+                });
+            }
+        }
+    }
+    catch (e) {
+        const msg = `WWR error: ${e.message}`;
+        errors.push(msg);
+        console.error(`[searchJobs] ${msg}`);
+    }
+    // ── Working Nomads ───────────────────────────────────────────────────────
+    try {
+        const res = await fetch("https://www.workingnomads.com/api/exposed_jobs/?category=development", { headers: { "User-Agent": "JobPilot-MCP/1.0" } });
+        if (!res.ok) {
+            const msg = `WorkingNomads HTTP ${res.status}`;
+            errors.push(msg);
+            console.error(`[searchJobs] ${msg}`);
+        }
+        else {
+            const data = (await res.json());
+            if (!Array.isArray(data)) {
+                const msg = "WorkingNomads returned non-array response";
                 errors.push(msg);
                 console.error(`[searchJobs] ${msg}`);
             }
             else {
-                const xml = await res.text();
-                const itemRegex = /<item>([\s\S]*?)<\/item>/g;
-                let match;
-                while ((match = itemRegex.exec(xml)) !== null && jobs.length < max_results) {
-                    const item = match[1];
-                    const getTag = (tag) => {
-                        const m = new RegExp(`<${tag}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`).exec(item) ||
-                            new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`).exec(item);
-                        return m ? m[1].trim() : "";
-                    };
-                    const title = getTag("title");
-                    const link = getTag("link");
-                    const desc = getTag("description").replace(/<[^>]+>/g, "").slice(0, 500);
-                    if (!matchesRole(title, [wwrCategory], role))
-                        continue;
-                    const company = title.split(" at ").pop() || "Unknown";
-                    const jobTitle = title.split(" at ")[0] || title;
-                    jobs.push({
-                        id: `wwr-${Buffer.from(link).toString("base64").slice(0, 16)}`,
-                        title: jobTitle,
-                        company,
-                        url: link,
-                        description: desc,
-                        tags: [wwrCategory],
-                        date_posted: getTag("pubDate"),
-                        source: "WeWorkRemotely",
+                for (const job of data) {
+                    const jobTags = Array.isArray(job.tags)
+                        ? job.tags.map((t) => (typeof t === "string" ? t : t.name || ""))
+                        : [];
+                    allFetchedJobs.push({
+                        id: `wn-${job.id || job.slug || Math.random().toString(36).slice(2, 10)}`,
+                        title: job.title || "Untitled",
+                        company: job.company_name || "Unknown",
+                        url: job.url || job.apply_url || "",
+                        salary: job.salary || undefined,
+                        description: (job.description || "").replace(/<[^>]+>/g, "").slice(0, 500),
+                        tags: jobTags,
+                        date_posted: job.pub_date || new Date().toISOString(),
+                        source: "WorkingNomads",
                     });
                 }
             }
         }
-        catch (e) {
-            const msg = `WWR error: ${e.message}`;
-            errors.push(msg);
-            console.error(`[searchJobs] ${msg}`);
-        }
     }
-    // ── Working Nomads ─────────────────────────────────────────────────────────
-    if (jobs.length < max_results) {
-        try {
-            const res = await fetch("https://www.workingnomads.com/api/exposed_jobs/?category=development", { headers: { "User-Agent": "JobPilot-MCP/1.0" } });
-            if (!res.ok) {
-                const msg = `WorkingNomads HTTP ${res.status}`;
-                errors.push(msg);
-                console.error(`[searchJobs] ${msg}`);
-            }
-            else {
-                const data = (await res.json());
-                if (!Array.isArray(data)) {
-                    const msg = "WorkingNomads returned non-array response";
-                    errors.push(msg);
-                    console.error(`[searchJobs] ${msg}`);
-                }
-                else {
-                    for (const job of data) {
-                        if (jobs.length >= max_results)
-                            break;
-                        const jobTags = Array.isArray(job.tags)
-                            ? job.tags.map((t) => (typeof t === "string" ? t : t.name || ""))
-                            : [];
-                        if (!matchesRole(job.title || "", jobTags, role))
-                            continue;
-                        jobs.push({
-                            id: `wn-${job.id || job.slug || Math.random().toString(36).slice(2, 10)}`,
-                            title: job.title || "Untitled",
-                            company: job.company_name || "Unknown",
-                            url: job.url || job.apply_url || "",
-                            salary: job.salary || undefined,
-                            description: (job.description || "").replace(/<[^>]+>/g, "").slice(0, 500),
-                            tags: jobTags,
-                            date_posted: job.pub_date || new Date().toISOString(),
-                            source: "WorkingNomads",
-                        });
-                    }
-                }
-            }
-        }
-        catch (e) {
-            const msg = `WorkingNomads error: ${e.message}`;
-            errors.push(msg);
-            console.error(`[searchJobs] ${msg}`);
-        }
+    catch (e) {
+        const msg = `WorkingNomads error: ${e.message}`;
+        errors.push(msg);
+        console.error(`[searchJobs] ${msg}`);
     }
+    // ── FILTER: only keep jobs matching the role ─────────────────────────────
+    console.error(`[searchJobs] Total fetched before filter: ${allFetchedJobs.length}`);
+    const filtered = allFetchedJobs.filter((job) => jobMatchesRole(job.title, job.tags));
+    console.error(`[searchJobs] After filter: ${filtered.length} jobs match "${role}"`);
+    // Log first few rejected titles for debugging
+    if (filtered.length === 0 && allFetchedJobs.length > 0) {
+        const sample = allFetchedJobs.slice(0, 5).map((j) => `"${j.title}" [${j.tags.join(",")}]`);
+        console.error(`[searchJobs] Sample rejected titles: ${sample.join(", ")}`);
+    }
+    const jobs = filtered.slice(0, max_results);
     if (jobs.length === 0) {
         return {
             content: [
@@ -175,8 +184,10 @@ export async function searchJobs(args) {
                     type: "text",
                     text: JSON.stringify({
                         success: false,
-                        message: `No jobs found for "${role}". Try a broader keyword like "developer" or "engineer".`,
-                        errors,
+                        message: `No ${role} jobs found right now. ${allFetchedJobs.length} jobs were fetched but none matched "${role}". Try again later or use a broader keyword.`,
+                        errors: errors.length > 0 ? errors : undefined,
+                        total_fetched: allFetchedJobs.length,
+                        total_matched: 0,
                         jobs: [],
                     }, null, 2),
                 },

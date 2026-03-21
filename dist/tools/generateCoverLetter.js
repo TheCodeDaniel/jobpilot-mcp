@@ -15,12 +15,6 @@ export async function generateCoverLetter(args) {
     const topSkills = matchedSkills.length > 0 ? matchedSkills.slice(0, 3) : skills.slice(0, 3);
     // Most recent experience entry
     const recentExp = experience.length > 0 ? experience[0] : null;
-    // Extract a few specific requirements from the job description
-    const reqSentences = jobDesc
-        .split(/[.\n]/)
-        .map((s) => s.trim())
-        .filter((s) => s.length > 20 && /experience|proficien|knowledge|familiar|skill|require/i.test(s));
-    const topReq = reqSentences.length > 0 ? reqSentences[0] : "";
     // Senior framing
     const seniorLevel = years >= 4;
     const levelLabel = seniorLevel ? "senior-level" : "";
@@ -40,12 +34,7 @@ export async function generateCoverLetter(args) {
         if (recentExp) {
             paragraphs.push(`Most recently, as ${recentExp.title} at ${recentExp.company}, I led development efforts that sharpened my expertise in the exact areas this role demands.`);
         }
-        if (topReq) {
-            paragraphs.push(`What excites me most about ${company} is the focus on ${topReq.toLowerCase().slice(0, 120)}. I'd love to bring my energy and skills to help drive that mission forward!`);
-        }
-        else {
-            paragraphs.push(`What excites me most about ${company} is the opportunity to work with a team that's pushing boundaries. I'd love to bring my energy and skills to help drive that mission forward!`);
-        }
+        paragraphs.push(`What excites me most about ${company} is the opportunity to contribute to the ${jobTitle} team. I'd love to bring my energy and skills to help drive that mission forward!`);
         const contactLine = email ? `\nEmail: ${email}` : "";
         paragraphs.push(`I'd love to chat more about how I can contribute. Looking forward to hearing from you!${contactLine}\n\nBest,\n${name}`);
     }
@@ -77,12 +66,7 @@ export async function generateCoverLetter(args) {
         if (recentExp) {
             paragraphs.push(`In my most recent role as ${recentExp.title} at ${recentExp.company}, I developed and delivered solutions that strengthened my abilities in the areas this role demands.`);
         }
-        if (topReq) {
-            paragraphs.push(`I am particularly drawn to ${company} and the emphasis on ${topReq.toLowerCase().slice(0, 120)}. I believe my skills and experience align well with the challenges ahead.`);
-        }
-        else {
-            paragraphs.push(`I am particularly drawn to ${company} because of the team's commitment to impactful work and innovative engineering practices. I believe my skills and experience align well with the challenges ahead.`);
-        }
+        paragraphs.push(`I am particularly drawn to the ${jobTitle} opportunity at ${company}. I believe my skills and experience align well with the challenges ahead, and I am eager to contribute to the team's continued success.`);
         const contactLine = email ? `\nEmail: ${email}` : "";
         paragraphs.push(`I would welcome the opportunity to discuss how my experience aligns with your needs. Thank you for your consideration.${contactLine}\n\nSincerely,\n${name}`);
     }
