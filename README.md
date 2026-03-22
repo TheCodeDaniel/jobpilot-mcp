@@ -44,24 +44,30 @@ Anthropic API               Notion API
  cover letters, follow-ups)  read & write)
        │
        ▼
-RemoteOK / WeWorkRemotely
+RemoteOK / WeWorkRemotely / Himalayas
 (Free job board APIs)
+       │
+       ▼
+Playwright (Chromium)
+(Browser automation for
+ auto-apply form filling)
 ```
 
 ---
 
-## The 8 MCP Tools
+## The 9 MCP Tools
 
 | Tool | What it does |
 |---|---|
 | `setup_notion_db` | One-time setup — creates the Job List DB in Notion with the correct schema |
 | `parse_cv` | Extracts your profile from CV text or PDF — skills, titles, bio, experience |
-| `search_jobs` | Searches RemoteOK + WeWorkRemotely for matching roles |
+| `search_jobs` | Searches RemoteOK, WeWorkRemotely, and Himalayas for matching roles |
 | `score_job_fit` | AI scores how well you match each job (0–100) with gap analysis |
 | `generate_cover_letter` | Writes a personalised cover letter (professional / enthusiastic / concise) |
 | `generate_follow_up` | Drafts a follow-up email scaled to how long since you applied |
 | `log_to_notion` | Creates a row in your Notion Job Tracker with all details |
 | `update_application_status` | Updates status in Notion (Applied → Interview → Offer) |
+| **`auto_apply`** | **Full pipeline: search → score → cover letter → browser apply → Notion log** |
 
 ---
 
@@ -253,6 +259,49 @@ Generate a follow-up email for my Flutter Engineer application at Stripe. It's b
 
 ---
 
+### Auto-Apply Workflow
+
+The most powerful feature of JobPilot. Run the full job application pipeline with a single command.
+
+**What it does:**
+1. Searches for remote jobs matching your role across multiple job boards
+2. Scores each job against your CV (only applies to jobs scoring >= min_fit_score)
+3. Generates a tailored cover letter for each qualifying job
+4. Fills and submits application forms automatically using browser automation (Playwright)
+5. Logs every application to your Notion tracker with status, score, and cover letter
+
+**Example usage in Claude:**
+```
+Parse my CV, then auto-apply to 10 Flutter Developer jobs today
+```
+
+**Supported application methods:**
+- Easy Apply / Quick Apply buttons
+- Greenhouse ATS forms
+- Lever ATS forms
+- Workable ATS forms
+- BambooHR ATS forms
+- Generic form fill (best-effort)
+
+**When it skips a job:**
+- CAPTCHA detected
+- Login/account creation required
+- Already applied (duplicate detected in Notion)
+- Form too complex (>3 steps)
+
+Skipped jobs are logged to Notion as "Pending" for manual follow-up.
+
+**Dry run mode:**
+Set `dry_run: true` to run the full pipeline (search → score → cover letter → log) without actually submitting any forms. Useful for previewing what would be applied to.
+
+**Safety:**
+- Never enters financial information
+- Never creates accounts or passwords
+- Never applies to the same job twice
+- Always takes a screenshot after submission as proof (saved to `screenshots/`)
+
+---
+
 ## Example Notion Output
 
 After running the full pipeline, your Notion Job Tracker will look like this:
@@ -293,12 +342,13 @@ jobpilot-mcp/
 │   ├── index.ts                    # MCP server + tool registry
 │   └── tools/
 │       ├── parseCV.ts              # CV parsing via Claude AI
-│       ├── searchJobs.ts           # RemoteOK + WeWorkRemotely APIs
+│       ├── searchJobs.ts           # RemoteOK + WeWorkRemotely + Himalayas APIs
 │       ├── scoreJobFit.ts          # AI fit scoring
 │       ├── generateCoverLetter.ts  # AI cover letter generation
 │       ├── generateFollowUp.ts     # AI follow-up email drafting
 │       ├── logToNotion.ts          # Create row in Notion DB
-│       └── updateApplicationStatus.ts  # Update existing Notion row
+│       ├── updateApplicationStatus.ts  # Update existing Notion row
+│       └── autoApply.ts            # Full auto-apply pipeline with Playwright
 ├── dist/                           # Compiled output (after npm run build)
 ├── .env.example                    # Environment variable template
 ├── package.json
@@ -312,8 +362,9 @@ jobpilot-mcp/
 
 - **Runtime**: Node.js 18+ with TypeScript
 - **MCP SDK**: `@modelcontextprotocol/sdk` (official Anthropic SDK)
-- **AI**: Anthropic Claude Sonnet (via `@anthropic-ai/sdk`) for CV parsing, fit scoring, letter generation
-- **Job Data**: RemoteOK API + WeWorkRemotely RSS (both free, no auth required)
+- **AI**: CV parsing, fit scoring, and letter generation (all local, no external AI calls)
+- **Job Data**: RemoteOK API + WeWorkRemotely RSS + Himalayas API (all free, no auth required)
+- **Browser Automation**: Playwright (Chromium) for auto-apply form filling
 - **Storage**: Notion REST API v1 (2022-06-28)
 - **Host**: Claude Desktop
 
@@ -321,7 +372,7 @@ jobpilot-mcp/
 
 ## Roadmap / Future Ideas
 
-- [ ] LinkedIn Easy Apply automation via Playwright
+- [x] Auto-apply with browser automation via Playwright (Easy Apply, ATS forms, generic forms)
 - [ ] Daily digest: "You have 3 applications with no response after 14 days"
 - [ ] Salary negotiation email generator
 - [ ] Interview prep notes auto-added to Notion page

@@ -14,6 +14,7 @@ import { logToNotion } from "./tools/logToNotion.js";
 import { updateApplicationStatus } from "./tools/updateApplicationStatus.js";
 import { searchJobs } from "./tools/searchJobs.js";
 import { setupNotionDB } from "./tools/setupNotionDB.js";
+import { autoApply } from "./tools/autoApply.js";
 
 const server = new Server(
   {
@@ -68,7 +69,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "search_jobs",
         description:
-          "Search for open job listings on RemoteOK and We Work Remotely based on a role keyword and optional filters.",
+          "Search for open job listings on RemoteOK, We Work Remotely, and Himalayas based on a role keyword and optional filters.",
         inputSchema: {
           type: "object",
           properties: {
@@ -196,6 +197,43 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["notion_page_id", "new_status"],
         },
       },
+      {
+        name: "auto_apply",
+        description:
+          "Automatically search, score, generate cover letters, and apply to N remote jobs matching the candidate profile. Uses browser automation (Playwright) to fill and submit application forms. Logs all applications to Notion.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            candidate_profile: {
+              type: "object",
+              description: "Structured candidate profile from parse_cv",
+            },
+            role: {
+              type: "string",
+              description: 'Job role to search and apply for, e.g. "Flutter Developer"',
+            },
+            max_applications: {
+              type: "number",
+              description: "Maximum number of jobs to apply to (default 5, max 20)",
+            },
+            min_fit_score: {
+              type: "number",
+              description: "Minimum fit score to apply (default 65, 0-100)",
+            },
+            tone: {
+              type: "string",
+              enum: ["professional", "enthusiastic", "concise"],
+              description: "Tone for generated cover letters (default: professional)",
+            },
+            dry_run: {
+              type: "boolean",
+              description:
+                "If true, runs the full pipeline (search, score, cover letter, log) but skips actual form submission",
+            },
+          },
+          required: ["candidate_profile", "role"],
+        },
+      },
     ],
   };
 });
@@ -229,6 +267,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "update_application_status":
         return await updateApplicationStatus(args as any);
+
+      case "auto_apply":
+        return await autoApply(args as any);
 
       default:
         throw new Error(`Unknown tool: ${name}`);

@@ -1,10 +1,10 @@
 // Related tags for specific domains — used as fallback matching
 const RELATED_TAGS = {
-    flutter: ["flutter", "dart", "mobile", "ios", "android"],
-    mobile: ["flutter", "dart", "mobile", "ios", "android", "react-native", "swift", "kotlin"],
+    flutter: ["flutter", "dart"],
+    mobile: ["flutter", "dart", "mobile", "react-native", "swift", "kotlin"],
     react: ["react", "reactjs", "react-native", "javascript", "typescript", "frontend"],
-    ios: ["ios", "swift", "mobile", "flutter", "dart"],
-    android: ["android", "kotlin", "java", "mobile", "flutter", "dart"],
+    ios: ["ios", "swift", "flutter", "dart"],
+    android: ["android", "kotlin", "java", "flutter", "dart"],
 };
 export async function searchJobs(args) {
     const { role, max_results = 10 } = args;
@@ -127,45 +127,74 @@ export async function searchJobs(args) {
         errors.push(msg);
         console.error(`[searchJobs] ${msg}`);
     }
-    // ── Working Nomads ───────────────────────────────────────────────────────
+    // ── Himalayas (primary) / Jobicy (fallback) ─────────────────────────────
+    let thirdSourceDone = false;
+    // Try Himalayas first
     try {
-        const res = await fetch("https://www.workingnomads.com/api/exposed_jobs/?category=development", { headers: { "User-Agent": "JobPilot-MCP/1.0" } });
-        if (!res.ok) {
-            const msg = `WorkingNomads HTTP ${res.status}`;
-            errors.push(msg);
-            console.error(`[searchJobs] ${msg}`);
+        const q = encodeURIComponent(role);
+        const res = await fetch(`https://himalayas.app/api/jobs?q=${q}&limit=20&remote=true`, { headers: { "User-Agent": "JobPilot-MCP/1.0" } });
+        if (res.ok) {
+            const data = (await res.json());
+            const jobs = Array.isArray(data?.jobs) ? data.jobs : Array.isArray(data) ? data : [];
+            console.error(`[searchJobs] Himalayas returned ${jobs.length} listings`);
+            for (const job of jobs) {
+                if (!job.title && !job.name)
+                    continue;
+                allFetchedJobs.push({
+                    id: `him-${job.id || job.slug || Math.random().toString(36).slice(2, 10)}`,
+                    title: job.title || job.name || "Untitled",
+                    company: job.company_name || job.company || "Unknown",
+                    url: job.url || job.application_url || "",
+                    salary: job.salary || undefined,
+                    description: (job.description || job.excerpt || "").replace(/<[^>]+>/g, "").slice(0, 500),
+                    tags: Array.isArray(job.tags) ? job.tags.map((t) => typeof t === "string" ? t : t.name || "") : [],
+                    date_posted: job.published_at || job.pub_date || new Date().toISOString(),
+                    source: "Himalayas",
+                });
+            }
+            thirdSourceDone = true;
         }
         else {
-            const data = (await res.json());
-            if (!Array.isArray(data)) {
-                const msg = "WorkingNomads returned non-array response";
-                errors.push(msg);
-                console.error(`[searchJobs] ${msg}`);
-            }
-            else {
-                for (const job of data) {
-                    const jobTags = Array.isArray(job.tags)
-                        ? job.tags.map((t) => (typeof t === "string" ? t : t.name || ""))
-                        : [];
-                    allFetchedJobs.push({
-                        id: `wn-${job.id || job.slug || Math.random().toString(36).slice(2, 10)}`,
-                        title: job.title || "Untitled",
-                        company: job.company_name || "Unknown",
-                        url: job.url || job.apply_url || "",
-                        salary: job.salary || undefined,
-                        description: (job.description || "").replace(/<[^>]+>/g, "").slice(0, 500),
-                        tags: jobTags,
-                        date_posted: job.pub_date || new Date().toISOString(),
-                        source: "WorkingNomads",
-                    });
-                }
-            }
+            console.error(`[searchJobs] Himalayas HTTP ${res.status}, trying Jobicy fallback`);
         }
     }
     catch (e) {
-        const msg = `WorkingNomads error: ${e.message}`;
-        errors.push(msg);
-        console.error(`[searchJobs] ${msg}`);
+        console.error(`[searchJobs] Himalayas error: ${e.message}, trying Jobicy fallback`);
+    }
+    // Fallback to Jobicy if Himalayas failed
+    if (!thirdSourceDone) {
+        try {
+            const tag = encodeURIComponent(keywords[0] || role);
+            const res = await fetch(`https://jobicy.com/api/v2/remote-jobs?count=20&tag=${tag}`, { headers: { "User-Agent": "JobPilot-MCP/1.0" } });
+            if (res.ok) {
+                const data = (await res.json());
+                const jobs = Array.isArray(data?.jobs) ? data.jobs : [];
+                console.error(`[searchJobs] Jobicy returned ${jobs.length} listings`);
+                for (const job of jobs) {
+                    if (!job.jobTitle)
+                        continue;
+                    allFetchedJobs.push({
+                        id: `jobicy-${job.id || Math.random().toString(36).slice(2, 10)}`,
+                        title: job.jobTitle || "Untitled",
+                        company: job.companyName || "Unknown",
+                        url: job.url || "",
+                        salary: job.annualSalaryMin && job.annualSalaryMax
+                            ? `$${job.annualSalaryMin}–$${job.annualSalaryMax}`
+                            : undefined,
+                        description: (job.jobDescription || "").replace(/<[^>]+>/g, "").slice(0, 500),
+                        tags: Array.isArray(job.jobIndustry) ? job.jobIndustry : [],
+                        date_posted: job.pubDate || new Date().toISOString(),
+                        source: "Jobicy",
+                    });
+                }
+            }
+            else {
+                console.error(`[searchJobs] Jobicy HTTP ${res.status}, skipping third source`);
+            }
+        }
+        catch (e) {
+            console.error(`[searchJobs] Jobicy error: ${e.message}, continuing without third source`);
+        }
     }
     // ── FILTER: only keep jobs matching the role ─────────────────────────────
     console.error(`[searchJobs] Total fetched before filter: ${allFetchedJobs.length}`);
