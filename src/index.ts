@@ -15,6 +15,8 @@ import { updateApplicationStatus } from "./tools/updateApplicationStatus.js";
 import { searchJobs } from "./tools/searchJobs.js";
 import { setupNotionDB } from "./tools/setupNotionDB.js";
 import { autoApply } from "./tools/autoApply.js";
+import { linkedInApply } from "./tools/linkedInApply.js";
+import { indeedApply } from "./tools/indeedApply.js";
 
 const server = new Server(
   {
@@ -234,6 +236,136 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["candidate_profile", "role"],
         },
       },
+      {
+        name: "linkedin_apply",
+        description:
+          "Search LinkedIn for jobs and auto-apply using Easy Apply. Uses a persistent browser session — on first run the user logs in manually; all subsequent runs reuse the saved session. Each application result includes a 'confirmed' flag, confidence level, confirmation message, and a screenshot path so you can verify every submission.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            candidate_profile: {
+              type: "object",
+              description: "Structured candidate profile from parse_cv",
+            },
+            role: {
+              type: "string",
+              description: 'Job role to search for, e.g. "Flutter Developer"',
+            },
+            location: {
+              type: "string",
+              description: 'Search location (default: "Worldwide")',
+            },
+            remote: {
+              type: "boolean",
+              description: "Filter for remote jobs only (default: true)",
+            },
+            easy_apply_only: {
+              type: "boolean",
+              description: "Only apply to Easy Apply jobs (default: true)",
+            },
+            date_posted: {
+              type: "string",
+              enum: ["day", "week", "month", "any"],
+              description: "How recently the job was posted (default: week)",
+            },
+            experience_levels: {
+              type: "array",
+              items: {
+                type: "string",
+                enum: ["internship", "entry", "associate", "mid_senior", "director", "executive"],
+              },
+              description: "Experience levels to filter by (default: [entry, associate, mid_senior])",
+            },
+            job_types: {
+              type: "array",
+              items: {
+                type: "string",
+                enum: ["full_time", "part_time", "contract", "temporary", "internship"],
+              },
+              description: "Job types to filter by (default: [full_time])",
+            },
+            min_fit_score: {
+              type: "number",
+              description: "Minimum fit score to apply (default: 60, range 0-100)",
+            },
+            max_applications: {
+              type: "number",
+              description: "Maximum number of jobs to apply to (default: 10, max 20)",
+            },
+            tone: {
+              type: "string",
+              enum: ["professional", "enthusiastic", "concise"],
+              description: "Cover letter tone (default: professional)",
+            },
+            dry_run: {
+              type: "boolean",
+              description: "Open forms but do not submit — for previewing the pipeline",
+            },
+          },
+          required: ["candidate_profile", "role"],
+        },
+      },
+      {
+        name: "indeed_apply",
+        description:
+          "Search Indeed for jobs and auto-apply using Indeed's native 'Easily Apply' flow. Uses a persistent browser session — on first run the user logs in manually; all subsequent runs reuse the saved session. Each application result includes a 'confirmed' flag, confidence level, confirmation message, and a screenshot path so you can verify every submission.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            candidate_profile: {
+              type: "object",
+              description: "Structured candidate profile from parse_cv",
+            },
+            role: {
+              type: "string",
+              description: 'Job role to search for, e.g. "Flutter Developer"',
+            },
+            location: {
+              type: "string",
+              description: 'Search location (default: "Remote")',
+            },
+            remote: {
+              type: "boolean",
+              description: "Filter for remote jobs only (default: true)",
+            },
+            indeed_apply_only: {
+              type: "boolean",
+              description: "Only show jobs with Indeed's native apply flow (default: true)",
+            },
+            date_posted_days: {
+              type: "number",
+              description: "Only show jobs posted within this many days (default: 7)",
+            },
+            job_type: {
+              type: "string",
+              enum: ["full_time", "part_time", "contract", "temporary", "internship"],
+              description: "Job type filter (default: full_time)",
+            },
+            salary_min: {
+              type: "number",
+              description: "Minimum annual salary filter (optional)",
+            },
+            min_fit_score: {
+              type: "number",
+              description: "Minimum fit score to apply (default: 60, range 0-100)",
+            },
+            max_applications: {
+              type: "number",
+              description: "Maximum number of jobs to apply to (default: 10, max 20)",
+            },
+            tone: {
+              type: "string",
+              enum: ["professional", "enthusiastic", "concise"],
+              description: "Cover letter tone (default: professional)",
+            },
+            dry_run: {
+              type: "boolean",
+              description: "Open forms but do not submit — for previewing the pipeline",
+            },
+          },
+          required: ["candidate_profile", "role"],
+        },
+      },
     ],
   };
 });
@@ -270,6 +402,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "auto_apply":
         return await autoApply(args as any);
+
+      case "linkedin_apply":
+        return await linkedInApply(args as any);
+
+      case "indeed_apply":
+        return await indeedApply(args as any);
 
       default:
         throw new Error(`Unknown tool: ${name}`);

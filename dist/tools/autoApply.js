@@ -1,4 +1,4 @@
-import { chromium } from "playwright";
+import { getSession } from "./browserSession.js";
 import { mkdirSync } from "fs";
 import { searchJobs } from "./searchJobs.js";
 import { scoreJobFit } from "./scoreJobFit.js";
@@ -397,14 +397,12 @@ export async function autoApply(args) {
     }
     // ── Step 4: Browser automation ───────────────────────────────────────────
     console.error("[autoApply] Step 4: Launching browser for applications...");
-    let browser;
+    let session;
+    let page;
     const applyResults = [];
     try {
-        browser = await chromium.launch({ headless: false });
-        const context = await browser.newContext({
-            userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        });
-        const page = await context.newPage();
+        session = await getSession("general");
+        page = await session.context.newPage();
         for (const entry of jobsWithLetters) {
             const { job, score, coverLetter, snippet } = entry;
             // Check for duplicates before applying
@@ -426,16 +424,15 @@ export async function autoApply(args) {
             // Delay between applications
             await sleep(2500);
         }
-        await browser.close();
+        if (session && page)
+            await session.cleanup(page);
     }
     catch (err) {
         console.error(`[autoApply] Browser error: ${err.message}`);
-        if (browser) {
-            try {
-                await browser.close();
-            }
-            catch { /* ignore */ }
-        }
+        if (session && page)
+            await session.cleanup(page).catch(() => { });
+        else if (session)
+            await session.context.close().catch(() => { });
     }
     // ── Step 5: Log to Notion ────────────────────────────────────────────────
     console.error("[autoApply] Step 5: Logging to Notion...");
