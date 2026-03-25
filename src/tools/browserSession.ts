@@ -1,48 +1,22 @@
 /**
- * browserSession.ts — automatic browser session manager for JobPilot
+ * browserSession.ts — browser session manager for JobPilot
  *
- * Priority order (no manual setup required):
+ * Uses a dedicated JobPilot profile — completely separate from your real Chrome.
+ * Your personal Chrome profile is never touched.
  *
- *  1. Connect to Chrome if already running with remote debugging (--remote-debugging-port).
- *  2. Open your REAL Chrome profile via launchPersistentContext — you are already logged in
- *     everywhere because this is the exact same profile Chrome uses day-to-day.
- *     If Chrome is already open, macOS/Windows route the launch back into the existing
- *     instance as a new window, so your sessions remain intact.
- *  3. Fallback: a saved Playwright session in ~/.jobpilot/sessions/<name>.
- *     On first use a login window opens; the session is saved for all future runs.
- *  4. Last resort: bundled Chromium with the same saved session.
+ *  1. Connects to Chrome via CDP if already running with --remote-debugging-port.
+ *  2. Opens the JobPilot-dedicated Chrome profile from ~/.jobpilot/sessions/<name>/.
+ *     First run: a login window appears — log in once, session is saved forever.
+ *     All subsequent runs: cookies are reloaded automatically, no login needed.
+ *  3. Falls back to bundled Chromium with the same saved session if Chrome is absent.
  */
 
 import { chromium, type BrowserContext, type Page } from "playwright";
-import { mkdirSync, existsSync } from "fs";
-import { homedir, platform as osPlatform } from "os";
+import { mkdirSync } from "fs";
+import { homedir } from "os";
 import { join } from "path";
 
-// ── Locate the user's real Chrome user-data directory ────────────────────────
-// This is where Chrome stores cookies, sessions, and login state.
-
-function getRealChromeDataDir(): string | null {
-  const os = osPlatform();
-
-  if (os === "darwin") {
-    const p = join(homedir(), "Library", "Application Support", "Google", "Chrome");
-    return existsSync(p) ? p : null;
-  }
-
-  if (os === "win32") {
-    const p = join(process.env.LOCALAPPDATA ?? "", "Google", "Chrome", "User Data");
-    return existsSync(p) ? p : null;
-  }
-
-  // Linux
-  const linuxPaths = [
-    join(homedir(), ".config", "google-chrome"),
-    join(homedir(), ".config", "chromium"),
-  ];
-  return linuxPaths.find(existsSync) ?? null;
-}
-
-// ── Fallback session directory (used only when real profile is unavailable) ──
+// ── Session directory for the dedicated JobPilot profile ─────────────────────
 
 function getSessionDir(sessionName: string): string {
   const dir = join(homedir(), ".jobpilot", "sessions", sessionName);
@@ -57,7 +31,7 @@ export interface BrowserSession {
   /** Call this when done. Closes only what JobPilot opened, never the whole browser. */
   cleanup: (page: Page) => Promise<void>;
   /** How the session was established — included in tool output for transparency. */
-  mode: "cdp_existing" | "real_chrome_profile" | "persistent_chrome" | "persistent_chromium";
+  mode: "cdp_existing" | "persistent_chrome" | "persistent_chromium";
 }
 
 export async function getSession(
@@ -67,7 +41,7 @@ export async function getSession(
   const cdpUrl = `http://localhost:${debugPort}`;
 
   // ── Step 1: Connect to already-running Chrome with remote debugging ────────
-  // Works instantly if the user started Chrome with --remote-debugging-port=9222.
+  // Works if the user (or a previous run) started Chrome with --remote-debugging-port.
   try {
     const browser = await chromium.connectOverCDP(cdpUrl, { timeout: 2000 });
     const contexts = browser.contexts();
@@ -84,44 +58,13 @@ export async function getSession(
       },
     };
   } catch {
-    console.error(`[browserSession] No Chrome on port ${debugPort} — opening with your real Chrome profile...`);
+    console.error(`[browserSession] No Chrome on port ${debugPort} — opening JobPilot profile...`);
   }
 
-  // ── Step 2: Open your real Chrome profile ────────────────────────────────
-  // Points Playwright at the same user-data-dir Chrome uses every day, so all
-  // your cookies and logins are already there.  On macOS/Windows, if Chrome is
-  // already running, this opens a new window inside your existing Chrome instance.
-  const realDataDir = getRealChromeDataDir();
-
-  if (realDataDir) {
-    try {
-      const context = await chromium.launchPersistentContext(realDataDir, {
-        headless: false,
-        channel: "chrome",
-        viewport: null, // let Chrome use its own window size
-        args: [
-          "--no-first-run",
-          "--no-default-browser-check",
-          `--remote-debugging-port=${debugPort}`, // next run can use CDP (step 1)
-        ],
-      });
-
-      console.error(`[browserSession] ✓ Opened your real Chrome profile — all sessions active`);
-      console.error(`[browserSession] Profile: ${realDataDir}`);
-
-      return {
-        context,
-        mode: "real_chrome_profile",
-        cleanup: async (_page: Page) => {
-          await context.close().catch(() => {});
-        },
-      };
-    } catch (err: any) {
-      console.error(`[browserSession] Could not open real Chrome profile (${err.message}) — falling back`);
-    }
-  }
-
-  // ── Step 3: Saved Playwright session (one-time login) ────────────────────
+  // ── Step 2: JobPilot-dedicated session (system Chrome) ────────────────────
+  // Uses ~/.jobpilot/sessions/<name>/ — a profile completely separate from the
+  // user's real Chrome.  Cookies are saved to disk on close, so login persists
+  // across all future MCP runs.
   const sessionDir = getSessionDir(sessionName);
 
   try {
@@ -129,11 +72,16 @@ export async function getSession(
       headless: false,
       channel: "chrome",
       viewport: { width: 1280, height: 900 },
-      args: ["--no-first-run", "--no-default-browser-check"],
+      args: [
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-blink-features=AutomationControlled", // Hides the "Automated" banner
+      ],
+      ignoreDefaultArgs: ["--enable-automation"], // Crucial: prevents Chrome from identifying itself as a bot
     });
 
-    console.error(`[browserSession] ✓ Launched Chrome with saved JobPilot session`);
-    console.error(`[browserSession] Session saved at: ${sessionDir}`);
+    console.error(`[browserSession] ✓ Opened JobPilot Chrome session`);
+    console.error(`[browserSession] Profile: ${sessionDir}`);
     console.error(`[browserSession] If you see a login screen, log in once — it will be remembered.`);
 
     return {
@@ -144,18 +92,18 @@ export async function getSession(
       },
     };
   } catch {
-    console.error(`[browserSession] System Chrome not found — using bundled Chromium`);
+    console.error(`[browserSession] System Chrome not available — using bundled Chromium`);
   }
 
-  // ── Step 4: Bundled Chromium with saved session (last resort) ────────────
+  // ── Step 3: Bundled Chromium with saved session (last resort) ────────────
   const context = await chromium.launchPersistentContext(sessionDir, {
     headless: false,
     viewport: { width: 1280, height: 900 },
     args: ["--no-first-run", "--no-default-browser-check"],
   });
 
-  console.error(`[browserSession] ✓ Launched bundled Chromium with saved session`);
-  console.error(`[browserSession] Session saved at: ${sessionDir}`);
+  console.error(`[browserSession] ✓ Opened JobPilot Chromium session`);
+  console.error(`[browserSession] Profile: ${sessionDir}`);
   console.error(`[browserSession] If you see a login screen, log in once — it will be remembered.`);
 
   return {
